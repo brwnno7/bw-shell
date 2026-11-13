@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BW</title>
+<style>
+/* =====================================================================
+   BW Shell · estilos
+   Regra de performance: tudo que anima usa apenas `transform` e `opacity`.
+   Hover/estados usam pseudo-elementos cuja opacidade é animada.
+   ===================================================================== */
+:root {
+  /* definidos também via JS a partir de CONFIG (fonte única da verdade) */
+  --base: 46px;
+  --panel-h: 70px;
+  --item-bottom: 12px;
+  --dock-bottom: 10px;
+  --menubar-h: 28px;
+  --accent: #4da3ff;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  font-size: 13px; color: #fff; background: #0b1020;
+  user-select: none; -webkit-user-select: none;
+}
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+
+/* ---------- Vidro ---------- */
+.glass {
+  background: rgba(24, 26, 38, .38);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+  backdrop-filter: blur(24px) saturate(170%);
+}
+
+/* ---------- Papel de parede (estático) ---------- */
+.wallpaper {
+  position: fixed; inset: 0; z-index: 0;
+  background:
+    radial-gradient(60% 55% at 15% 20%, #ff7eb3 0%, transparent 60%),
+    radial-gradient(55% 60% at 85% 25%, #5b8cff 0%, transparent 60%),
+    radial-gradient(60% 60% at 70% 85%, #ffb86b 0%, transparent 60%),
+    radial-gradient(50% 55% at 25% 85%, #7a5cff 0%, transparent 60%),
+    linear-gradient(135deg, #1b1f4b, #3a1c5e);
+}
+.hint {
+  position: fixed; top: 110px; left: 0; right: 0; text-align: center; z-index: 1;
+  color: rgba(255,255,255,.85); text-shadow: 0 1px 8px rgba(0,0,0,.35); pointer-events: none;
+}
+.hint b { display: block; font-size: 44px; font-weight: 800; letter-spacing: .06em; margin-bottom: 6px; }
+
+/* ---------- Barra de menus ---------- */
+.menubar {
+  position: fixed; top: 0; left: 0; right: 0; height: var(--menubar-h); z-index: 50;
+  display: flex; align-items: center; justify-content: space-between; padding: 0 10px;
+  background: rgba(20, 20, 30, .30);
+  border-bottom: 1px solid rgba(255,255,255,.10);
+  text-shadow: 0 1px 2px rgba(0,0,0,.3);
+}
+.menubar .left, .menubar .right { display: flex; align-items: center; gap: 2px; }
+.mb {
+  position: relative; isolation: isolate; height: 22px; padding: 0 9px;
+  display: inline-flex; align-items: center; justify-content: center; font-weight: 500; white-space: nowrap;
+}
+.mb::before, .pi::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 5px;
+  background: rgba(255,255,255,.22); opacity: 0; transition: opacity .12s;
+}
+.mb:hover::before, .mb.active::before, .pi:hover::before { opacity: 1; }
+.mb.logo { font-weight: 800; font-size: 14px; letter-spacing: .05em; margin-right: 4px; }
+.mb.ico { width: 30px; padding: 0; }
+.mb svg { width: 17px; height: 17px; fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.mb.on svg { stroke: #6cf08a; }
+.mute-x { display: none; }
+.muted .mute-x { display: block; }
+.muted .wave { display: none; }
+.clock { padding: 0 8px 0 10px; font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ---------- Dock ---------- */
+.dock {
+  position: fixed; left: 50%; bottom: var(--dock-bottom); width: 0; height: 0; z-index: 20;
+  contain: layout style;
+}
+.dock-panel {
+  position: absolute; bottom: 0; height: var(--panel-h); border-radius: 24px;
+  background: linear-gradient(180deg, rgba(255,255,255,.28), rgba(255,255,255,.13));
+  border: 1px solid rgba(255,255,255,.34);
+  box-shadow: 0 18px 44px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.45), inset 0 -1px 0 rgba(255,255,255,.08);
+  transform-origin: 50% 50%; will-change: transform;
+}
+.item {
+  position: absolute; left: 0; bottom: var(--item-bottom);
+  width: var(--base); height: var(--base);
+  transform-origin: 0 100%; will-change: transform; cursor: pointer;
+}
+.sep {
+  position: absolute; left: 0; bottom: var(--item-bottom); width: 1px; height: var(--base);
+  background: linear-gradient(180deg, transparent, rgba(255,255,255,.5) 20%, rgba(255,255,255,.5) 80%, transparent);
+  will-change: transform; pointer-events: none;
+}
+.dot {
+  position: absolute; left: 0; bottom: 4px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%;
+  background: #fff; box-shadow: 0 0 4px rgba(255,255,255,.7);
+  opacity: 0; transition: opacity .2s; will-change: transform; pointer-events: none;
+}
+.dot.on { opacity: 1; }
+.tip {
+  position: absolute; left: 0; bottom: 0; padding: 5px 12px; border-radius: 8px; white-space: nowrap;
+  font-weight: 500; background: rgba(40,40,52,.78); border: 1px solid rgba(255,255,255,.16);
+  box-shadow: 0 6px 18px rgba(0,0,0,.3);
+  opacity: 0; transition: opacity .12s; pointer-events: none; will-change: transform, opacity;
+}
+
+/* ---------- Ícone (quadrado arredondado; símbolo ocupa 70%) ---------- */
+.icon {
+  width: 100%; height: 100%; border-radius: 22.5%; overflow: hidden;
+  display: block; transform-origin: 50% 100%;
+  box-shadow: 0 5px 12px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.45), inset 0 -2px 4px rgba(0,0,0,.15);
+}
+.icon svg { display: block; width: 100%; height: 100%; padding: 15%; } /* 100% - 2×15% = 70% */
+.icon.ghost { box-shadow: inset 0 0 0 1px rgba(255,255,255,.35), inset 0 1px 0 rgba(255,255,255,.4); }
+.icon.bounce { animation: bounce 1.1s 1; }
+/* Pulo estilo macOS: 4 saltos decrescentes (percentuais da altura do ícone) */
+@keyframes bounce {
+  0%   { transform: translate3d(0,0,0); }
+  10%  { transform: translate3d(0,-70%,0); animation-timing-function: cubic-bezier(.55,0,1,.45); }
+  22%  { transform: translate3d(0,0,0);    animation-timing-function: cubic-bezier(0,.55,.45,1); }
+  38%  { transform: translate3d(0,-45%,0); animation-timing-function: cubic-bezier(.55,0,1,.45); }
+  52%  { transform: translate3d(0,0,0);    animation-timing-function: cubic-bezier(0,.55,.45,1); }
+  66%  { transform: translate3d(0,-20%,0); animation-timing-function: cubic-bezier(.55,0,1,.45); }
+  78%  { transform: translate3d(0,0,0);    animation-timing-function: cubic-bezier(0,.55,.45,1); }
+  88%  { transform: translate3d(0,-6%,0); }
+  100% { transform: translate3d(0,0,0); }
+}
+
+/* ---------- Popup (menus e menu de contexto) ---------- */
+#popup {
+  position: fixed; z-index: 60; min-width: 220px; padding: 5px; border-radius: 10px;
+  background: rgba(34,36,50,.72); border: 1px solid rgba(255,255,255,.16);
+  box-shadow: 0 14px 40px rgba(0,0,0,.4);
+  opacity: 0; transform: translate3d(0,-4px,0) scale(.98); transform-origin: top left;
+  transition: opacity .12s, transform .12s; pointer-events: none;
+}
+#popup.open { opacity: 1; transform: none; pointer-events: auto; }
+.pi { position: relative; isolation: isolate; display: flex; justify-content: space-between; gap: 24px; width: 100%; padding: 5px 10px; text-align: left; }
+.pi[disabled] { opacity: .45; pointer-events: none; }
+.pi kbd { font: inherit; opacity: .55; }
+.psep { height: 1px; margin: 5px 6px; background: rgba(255,255,255,.15); }
+
+/* ---------- Overlays (Launchpad / Configurações) ---------- */
+.overlay {
+  position: fixed; inset: 0; z-index: 40; padding-top: var(--menubar-h);
+  opacity: 0; transform: scale(1.03); transition: opacity .18s, transform .18s; pointer-events: none;
+}
+.overlay.open { opacity: 1; transform: none; pointer-events: auto; }
+#launchpad { background: rgba(10,10,22,.55); display: flex; flex-direction: column; align-items: center; }
+.lp-head { width: min(860px, 92vw); padding: 36px 0 18px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.lp-head h2 { font-size: 22px; font-weight: 600; }
+#lp-search {
+  width: 260px; padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,.2);
+  background: rgba(255,255,255,.12); color: #fff; font: inherit; outline: none; user-select: text;
+}
+#lp-search::placeholder { color: rgba(255,255,255,.55); }
+.lp-grid {
+  width: min(860px, 92vw); display: grid; gap: 22px 12px; padding-bottom: 40px;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); overflow-y: auto; align-content: start;
+}
+.tile { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px 4px; transition: transform .15s; }
+.tile:hover { transform: scale(1.07); }
+.tile .icon { width: 72px; height: 72px; }
+.empty { grid-column: 1 / -1; text-align: center; opacity: .7; padding: 40px 0; }
+
+#settings { background: rgba(0,0,0,.35); display: grid; place-items: center; padding-top: 0; }
+#settings .panel { width: min(420px, 92vw); padding: 22px; border-radius: 16px; background: rgba(34,36,50,.8); border: 1px solid rgba(255,255,255,.16); box-shadow: 0 24px 60px rgba(0,0,0,.5); }
+#settings h3 { font-size: 17px; margin-bottom: 14px; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 11px 0; border-top: 1px solid rgba(255,255,255,.1); cursor: pointer; }
+.row small { display: block; opacity: .6; margin-top: 2px; }
+.btn { margin-top: 14px; width: 100%; padding: 9px; border-radius: 9px; background: rgba(255,255,255,.14); font-weight: 600; }
+.sw { position: relative; flex: none; width: 40px; height: 24px; }
+.sw input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; z-index: 2; }
+.sw i { position: absolute; inset: 0; border-radius: 999px; background: rgba(255,255,255,.2); overflow: hidden; }
+.sw i::before { content: ""; position: absolute; inset: 0; background: #34c759; opacity: 0; transition: opacity .15s; }
+.sw i::after { content: ""; position: absolute; left: 2px; top: 2px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+.sw input:checked + i::before { opacity: 1; }
+.sw input:checked + i::after { transform: translate3d(16px,0,0); }
+
+/* ---------- Toast ---------- */
+#toast {
+  position: fixed; top: 40px; left: 50%; z-index: 70; padding: 8px 16px; border-radius: 999px;
+  background: rgba(30,32,44,.85); border: 1px solid rgba(255,255,255,.16); box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  opacity: 0; transform: translate3d(-50%,-8px,0); transition: opacity .2s, transform .2s; pointer-events: none; white-space: nowrap;
+}
+#toast.show { opacity: 1; transform: translate3d(-50%,0,0); }
+
+/* =====================================================================
+   MODO JOGO / TRANSPARÊNCIA REDUZIDA
+   .game  → sem desfoque, sem animações nem transições (libera a GPU)
+   .flat  → apenas sem desfoque
+   ===================================================================== */
+.game *, .game *::before, .game *::after { animation: none !important; transition: none !important; }
+.game .glass, .flat .glass,
+.game #popup, .flat #popup, .game .dock-panel, .flat .dock-panel {
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+}
+.game .glass, .flat .glass { background: rgba(34,36,50,.95) !important; }
+.game .dock-panel, .flat .dock-panel { background: rgba(70,74,96,.95) !important; }
+.game #popup, .flat #popup { background: rgba(34,36,50,.97) !important; }
+.game .wallpaper, .flat .wallpaper { background: linear-gradient(135deg, #1b1f4b, #3a1c5e); }
+</style>
+</head>
+<body>
+
+<div class="wallpaper"></div>
+
+<header class="menubar glass" id="menubar">
+  <nav class="left">
+    <button class="mb logo" data-menu="bw">BW</button>
+    <button class="mb" data-menu="arquivo">Arquivo</button>
+    <button class="mb" data-menu="apps">Aplicativos</button>
+    <button class="mb" data-menu="jogos">Jogos</button>
+    <button class="mb" data-menu="energia">Energia</button>
+  </nav>
+  <div class="right">
+    <button class="mb ico" id="btn-game" title="Modo Jogo">
+      <svg viewBox="0 0 24 24"><path d="M6 8h12a4 4 0 0 1 4 4v3a3 3 0 0 1-5.2 2L15 15H9l-1.8 2A3 3 0 0 1 2 15v-3a4 4 0 0 1 4-4z"/><path d="M7.5 10.5v3M6 12h3"/><circle cx="15.5" cy="11.5" r=".6"/><circle cx="17.5" cy="13" r=".6"/></svg>
+    </button>
+    <button class="mb ico" id="btn-wifi" title="Wi-Fi">
+      <svg viewBox="0 0 24 24"><path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="19.2" r=".8" fill="#fff"/></svg>
+    </button>
+    <button class="mb ico" id="btn-sound" title="Som">
+      <svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path class="wave" d="M16.5 9a4.5 4.5 0 0 1 0 6M19 6.5a8 8 0 0 1 0 11"/><path class="mute-x" d="M17 9l5 6M22 9l-5 6"/></svg>
+    </button>
+    <span class="clock" id="clock"></span>
+  </div>
+</header>
+
+<div class="hint"><b>BW</b>Passe o mouse sobre a Dock · clique com o botão direito nos ícones</div>
+
+<section id="launchpad" class="overlay glass" aria-hidden="true">
+  <div class="lp-head"><h2 id="lp-title">Todos os Aplicativos</h2><input id="lp-search" placeholder="Buscar…" autocomplete="off"></div>
+  <div class="lp-grid" id="lp-grid"></div>
+</section>
+
+<section id="settings" class="overlay" aria-hidden="true">
+  <div class="panel">
+    <h3>Configurações BW</h3>
+    <label class="row"><span>Modo Jogo<small>Pausa animações e desfoque, libera a GPU</small></span><span class="sw"><input type="checkbox" id="s-game"><i></i></span></label>
+    <label class="row"><span>Magnificação da Dock<small>Efeito de ampliação ao passar o mouse</small></span><span class="sw"><input type="checkbox" id="s-magnify"><i></i></span></label>
+    <label class="row"><span>Reduzir transparência<small>Desliga o vidro fosco (desfoque)</small></span><span class="sw"><input type="checkbox" id="s-flat"><i></i></span></label>
+    <button class="btn" id="s-close">Fechar</button>
+  </div>
+</section>
+
+<div class="dock" id="dock">
+  <div class="dock-panel"></div>
+  <div class="tip"></div>
+</div>
+
+<div id="popup" role="menu"></div>
+<div id="toast"></div>
+
+<script>
+'use strict';
+/* =====================================================================
+   BW Shell — arquitetura em módulos (todos neste arquivo por ora)
+
+   1. CONFIG    constantes de layout/física
+   2. CATALOG   apps e jogos conhecidos (ícones em SVG)
+   3. BACKEND   ÚNICA ponte com o sistema. Hoje: mock. Amanhã: Tauri (Rust)
+   4. STORE     estado + persistência (localStorage)
+   5. UI        Toast, Popup
+   6. DOCK      renderização + física de magnificação (rAF sob demanda)
+   7. LAUNCHPAD / SETTINGS
+   8. SYSTEM    orquestração (abrir app, fechar, energia, menus de contexto)
+   9. GAMEMODE, MENUBAR, CLOCK
+   10. BOOT
+   ===================================================================== */
+
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+/* ---------------------------------------------------------------- 1. CONFIG */
+const CONFIG = Object.freeze({
+  BASE: 46,            // tamanho base do ícone (px)
+  MAX_SCALE: 1.85,     // ampliação máxima (46 → ~85px)
+  GAP: 8,              // espaçamento entre ícones
+  PAD: 12,             // padding interno do painel de vidro
+  SEP_W: 9,            // largura do separador
+  RADIUS: 130,         // raio de influência da magnificação (px)
+  SMOOTH: 20,          // rigidez da suavização
+  DOCK_BOTTOM: 10,     // distância da Dock até a borda inferior
+  PANEL_H: 70,         // altura do painel (BASE + 2×PAD)
+  ITEM_BOTTOM: 12,     // distância dos ícones até a base do painel
+});
+
+/* --------------------------------------------------------------- 2. CATALOG */
+const gear = (() => {
+  let t = ''; for (let a = 0; a < 360; a += 45) t += `<rect x="-6" y="-31" width="12" height="14" rx="3" transform="rotate(${a})"/>`;
+  return `<g transform="translate(32 32)" fill="#fff">${t}<circle r="21"/><circle r="9" fill="#7b818f"/></g>`;
+})();
+const gridDots = (() => {
+  let t = ''; for (const y of [2, 24, 46]) for (const x of [2, 24, 46]) t += `<rect x="${x}" y="${y}" width="16" height="16" rx="5"/>`;
+  return `<g fill="#fff">${t}</g>`;
+})();
+
+/* kind: 'system' | 'app' | 'game'.  `path` é o .exe real quando houver backend. */
+const A = (id, name, kind, bg, glyph, path = '') => ({ id, name, kind, bg, glyph, path });
+const APPS = [
+  A('launchpad', 'Launchpad',         'system', 'linear-gradient(180deg,#8a97ff,#4a4fe0)', gridDots),
+  A('files',     'Arquivos',          'system', 'linear-gradient(180deg,#5ec8ff,#1f78f0)',
+    `<path d="M2 16a7 7 0 0 1 7-7h14l7 8h25a7 7 0 0 1 7 7v28a7 7 0 0 1-7 7H9a7 7 0 0 1-7-7z" fill="#fff"/><path d="M2 27h60" stroke="#9fd2ff" stroke-width="3"/>`, 'C:\\Windows\\explorer.exe'),
+  A('browser',   'Navegador',         'system', 'linear-gradient(180deg,#58e8c8,#0f9d8a)',
+    `<circle cx="32" cy="32" r="29" fill="none" stroke="#fff" stroke-width="5"/><ellipse cx="32" cy="32" rx="12" ry="29" fill="none" stroke="#fff" stroke-width="4"/><path d="M4 32h56M9 18h46M9 46h46" stroke="#fff" stroke-width="4"/>`),
+  A('games',     'Pasta de Jogos',    'system', 'linear-gradient(180deg,#a97bff,#6a3fe0)',
+    `<rect x="1" y="12" width="62" height="40" rx="20" fill="#fff"/><path d="M16 23v18M7 32h18" stroke="#6a3fe0" stroke-width="6" stroke-linecap="round"/><circle cx="44" cy="40" r="5" fill="#6a3fe0"/><circle cx="53" cy="29" r="5" fill="#ff5c8a"/>`),
+  A('settings',  'Configurações BW',  'system', 'linear-gradient(180deg,#c3c8d4,#7b818f)', gear),
+
+  A('calc',  'Calculadora',   'app', 'linear-gradient(180deg,#ffb347,#ff7a00)',
+    `<rect x="4" y="2" width="56" height="18" rx="5" fill="#fff"/><g fill="#fff"><circle cx="13" cy="36" r="7"/><circle cx="32" cy="36" r="7"/><circle cx="51" cy="36" r="7"/><circle cx="13" cy="54" r="7"/><circle cx="32" cy="54" r="7"/><circle cx="51" cy="54" r="7"/></g>`, 'C:\\Windows\\System32\\calc.exe'),
+  A('notes', 'Bloco de Notas','app', 'linear-gradient(180deg,#ffe36a,#ffc400)',
+    `<rect x="6" y="2" width="52" height="60" rx="8" fill="#fffdf2"/><path d="M16 20h32M16 32h32M16 44h20" stroke="#d9c25a" stroke-width="5" stroke-linecap="round"/>`, 'C:\\Windows\\System32\\notepad.exe'),
+  A('term',  'Terminal',      'app', 'linear-gradient(180deg,#444857,#15161c)',
+    `<path d="M6 14l25 18-25 18" fill="none" stroke="#5cf28a" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M36 54h24" stroke="#5cf28a" stroke-width="7" stroke-linecap="round"/>`),
+  A('music', 'Música',        'app', 'linear-gradient(180deg,#ff6b81,#f0223f)',
+    `<path d="M22 4v40a11 11 0 1 0 6 10V19l28-7v26a11 11 0 1 0 6 10V0z" fill="#fff"/>`),
+
+  A('racer', 'Neon Racer',    'game', 'linear-gradient(180deg,#ff7a59,#d3265a)',
+    `<path d="M4 48a28 28 0 1 1 56 0" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round"/><path d="M32 48L46 22" stroke="#fff" stroke-width="7" stroke-linecap="round"/><circle cx="32" cy="48" r="7" fill="#fff"/>`),
+  A('space', 'Space Arena',   'game', 'linear-gradient(180deg,#3a3f94,#0f1236)',
+    `<circle cx="32" cy="32" r="18" fill="#ffd166"/><ellipse cx="32" cy="32" rx="30" ry="9" fill="none" stroke="#fff" stroke-width="5" transform="rotate(-22 32 32)"/>`),
+  A('quest', 'Pixel Quest',   'game', 'linear-gradient(180deg,#3ddc84,#0b8f4d)',
+    `<path d="M58 4h4v10L32 44l-12-12z" fill="#fff"/><path d="M12 28l24 24" stroke="#fff" stroke-width="6" stroke-linecap="round"/><path d="M14 50L5 59" stroke="#fff" stroke-width="8" stroke-linecap="round"/>`),
+  A('chess', 'Chess Pro',     'game', 'linear-gradient(180deg,#8b7bff,#35208f)',
+    `<circle cx="32" cy="14" r="11" fill="#fff"/><path d="M22 54l4-26h12l4 26z" fill="#fff"/><rect x="12" y="52" width="40" height="10" rx="5" fill="#fff"/>`),
+];
+const ADD_APP = { id: '__add', name: 'Fixar programa ou jogo', kind: 'system', ghost: true, bg: 'rgba(255,255,255,.18)',
+  glyph: `<path d="M32 4v56M4 32h56" stroke="#fff" stroke-width="7" stroke-linecap="round"/>` };
+const APPS_BY_ID = Object.fromEntries([...APPS, ADD_APP].map(a => [a.id, a]));
+const iconHTML = a => `<div class="icon${a.ghost ? ' ghost' : ''}" style="background:${a.bg}"><svg viewBox="0 0 64 64" aria-hidden="true">${a.glyph}</svg></div>`;
+
+/* --------------------------------------------------------------- 3. BACKEND
+   Única superfície de contato com o sistema operacional.
+   Para a etapa Tauri, implemente em Rust os comandos abaixo (#[tauri::command]):
+
+     list_apps()                      -> Vec<AppInfo>   { id, name, kind, path, icon_url? }
+     launch_app({ id, path })         -> { ok, pid }    std::process::Command / ShellExecuteW
+     focus_app({ id })                -> { ok }         SetForegroundWindow
+     close_app({ id })                -> { ok }         encerrar processo / WM_CLOSE
+     power_action({ action })         -> { ok }         'sleep' | 'restart' | 'shutdown' | 'lock' | 'logout'
+     set_game_mode({ enabled })       -> { ok }         plano de energia, prioridade de processo, etc.
+
+   Nada fora deste módulo deve saber se o backend é mock ou nativo.
+   ===================================================================== */
+const Backend = (() => {
+  const invoke = window.__TAURI__?.core?.invoke ?? window.__TAURI__?.invoke ?? null;
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const mock = {
+    async list_apps()   { return APPS; },
+    async launch_app()  { await wait(120); return { ok: true, pid: 1000 + Math.floor(Math.random() * 9e4) }; },
+    async focus_app()   { return { ok: true }; },
+    async close_app()   { await wait(60);  return { ok: true }; },
+    async power_action(){ return { ok: true }; },
+    async set_game_mode(){ return { ok: true }; },
+  };
+  const call = (cmd, args = {}) => invoke ? invoke(cmd, args) : mock[cmd](args);
+  return {
+    isNative: !!invoke,
+    listApps:    ()         => call('list_apps'),
+    launch:      app        => call('launch_app', { id: app.id, path: app.path }),
+    focus:       app        => call('focus_app',  { id: app.id }),
+    close:       app        => call('close_app',  { id: app.id }),
+    power:       action     => call('power_action', { action }),
+    setGameMode: enabled    => call('set_game_mode', { enabled }),
+  };
+})();
+
+/* ----------------------------------------------------------------- 4. STORE */
+const Store = (() => {
+  const KEY = 'bw.shell.v1';
+  const SYSTEM = ['launchpad', 'files', 'browser', 'games', 'settings'];
+  const PERSIST = ['pinned', 'magnify', 'flat', 'muted'];
+  const state = { pinned: [], running: new Set(), game: false, magnify: true, flat: false, muted: false };
+  const subs = new Set();
+
+  try { Object.assign(state, JSON.parse(localStorage.getItem(KEY) || '{}'), { game: false }); } catch {}
+  state.running = new Set();
+  state.pinned = state.pinned.filter(id => APPS_BY_ID[id] && !SYSTEM.includes(id));
+
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(Object.fromEntries(PERSIST.map(k => [k, state[k]])))); } catch {} };
+  const emit = () => subs.forEach(f => f());
+
+  return {
+    state, SYSTEM,
+    subscribe: f => subs.add(f),
+    set(key, val) { state[key] = val; if (PERSIST.includes(key)) save(); emit(); },
+    pin(id)   { if (!state.pinned.includes(id)) { state.pinned.push(id); save(); emit(); } },
+    unpin(id) { state.pinned = state.pinned.filter(x => x !== id); save(); emit(); },
+    setRunning(id, on) { on ? state.running.add(id) : state.running.delete(id); emit(); },
+    /* ordem da Dock: sistema | separador | fixados | em execução (não fixados) | + */
+    dockIds() {
+      const extra = [...state.running].filter(id => !SYSTEM.includes(id) && !state.pinned.includes(id));
+      return [...SYSTEM, 'sep', ...state.pinned, ...extra, '__add'];
+    },
+  };
+})();
+
+/* -------------------------------------------------------------------- 5. UI */
+const Toast = (() => {
+  const el = $('#toast'); let t = 0;
+  return { show(msg, ms = 2200) { el.textContent = msg; el.classList.add('show'); clearTimeout(t); t = setTimeout(() => el.classList.remove('show'), ms); } };
+})();
+
+const Popup = (() => {
+  const el = $('#popup'); let items = [], onClose = null;
+  function open(list, { x = 0, y = 0, above = false, onClose: cb = null } = {}) {
+    close();
+    items = list; onClose = cb;
+    el.innerHTML = list.map((it, i) => it.sep ? '<div class="psep"></div>'
+      : `<button class="pi" role="menuitem" data-i="${i}"${it.disabled ? ' disabled' : ''}><span>${esc(it.label)}</span>${it.kbd ? `<kbd>${esc(it.kbd)}</kbd>` : ''}</button>`).join('');
+    el.style.top = above ? 'auto' : y + 'px';
+    el.style.bottom = above ? (innerHeight - y) + 'px' : 'auto';
+    el.style.left = Math.max(8, Math.min(x, innerWidth - el.offsetWidth - 8)) + 'px';
+    el.classList.add('open');
+  }
+  function close() {
+    if (!el.classList.contains('open')) return;
+    el.classList.remove('open');
+    const cb = onClose; onClose = null; cb && cb();
+  }
+  el.addEventListener('click', e => {
+    const b = e.target.closest('.pi'); if (!b) return;
+    const it = items[+b.dataset.i]; close(); it && it.action && it.action();
+  });
+  document.addEventListener('pointerdown', e => { if (!e.target.closest('#popup') && !e.target.closest('[data-menu]')) close(); });
+  return { open, close, get isOpen() { return el.classList.contains('open'); } };
+})();
+
+/* ------------------------------------------------------------------ 6. DOCK
+   Física: o "ponto de foco" no espaço-base é obtido invertendo o layout
+   magnificado (busca binária) a partir da posição do mouse → sem realimentação,
+   logo sem tremor, e o ícone sob o cursor permanece sob o cursor.
+   Render: cada ícone é `translate3d + scale` (só compositor). O painel de vidro
+   cresce com `scaleX`. Nenhuma propriedade de layout é alterada por frame.
+   Loop: requestAnimationFrame SOB DEMANDA — roda só enquanto algo se move.
+   ===================================================================== */
+const Dock = (() => {
+  const C = CONFIG;
+  const root = $('#dock'), panel = $('.dock-panel'), tip = $('.tip');
+  let entries = [], baseTotal = 0, W0 = 0, halfW = 0, lastKey = '';
+  let active = false, enabled = true, mouseX = 0, raf = 0, last = 0, hot = null;
+
+  const falloff = d => d >= C.RADIUS ? 0 : (1 + Math.cos(Math.PI * d / C.RADIUS)) / 2;
+
+  /* ---- montagem ---- */
+  function render() {
+    const prev = new Map(entries.map(e => [e.id, e.s]));
+    root.querySelectorAll('.item, .sep, .dot').forEach(n => n.remove());
+    hot = null; tip.style.opacity = 0;
+    entries = Store.dockIds().map(id => {
+      const sep = id === 'sep', app = sep ? null : APPS_BY_ID[id];
+      const el = document.createElement('div');
+      el.className = sep ? 'sep' : 'item';
+      let dot = null;
+      if (!sep) {
+        el.dataset.id = id; el.innerHTML = iconHTML(app);
+        if (id !== '__add') { dot = document.createElement('div'); dot.className = 'dot'; }
+      }
+      root.appendChild(el); dot && root.appendChild(dot);
+      return { id, sep, app, el, dot, baseW: sep ? C.SEP_W : C.BASE, s: prev.get(id) ?? 1, x: 0, w: 0, bl: 0, bc: 0 };
+    });
+    let acc = 0;
+    entries.forEach((e, i) => { e.bl = acc; e.bc = acc + e.baseW / 2; acc += e.baseW + (i < entries.length - 1 ? C.GAP : 0); });
+    baseTotal = acc;
+    entries.forEach(e => { e.bl -= baseTotal / 2; e.bc -= baseTotal / 2; });   // origem no centro da Dock
+    W0 = baseTotal + 2 * C.PAD;
+    panel.style.width = W0 + 'px'; panel.style.left = (-W0 / 2) + 'px';
+    refreshRunning(); layout(); apply();
+    if (entries.some(e => e.s !== 1)) wake();
+  }
+  const refreshRunning = () => entries.forEach(e => e.dot && e.dot.classList.toggle('on', Store.state.running.has(e.id)));
+
+  /* ---- física ---- */
+  const widthsFor = u => entries.map(e => e.sep ? e.baseW : e.baseW * (1 + (C.MAX_SCALE - 1) * falloff(Math.abs(e.bc - u))));
+  function screenPos(u) {
+    const w = widthsFor(u), n = entries.length;
+    const total = w.reduce((s, v) => s + v, 0) + C.GAP * (n - 1);
+    let left = -total / 2;
+    for (let i = 0; i < n; i++) {
+      const slot = entries[i].baseW + C.GAP;
+      if (u <= entries[i].bl + slot || i === n - 1) {
+        const t = Math.min(1, Math.max(0, (u - entries[i].bl) / slot));
+        return left + t * (w[i] + C.GAP);
+      }
+      left += w[i] + C.GAP;
+    }
+    return left;
+  }
+  function solve(mx) {
+    let lo = -baseTotal / 2, hi = baseTotal / 2;
+    if (mx <= screenPos(lo)) return lo;
+    if (mx >= screenPos(hi)) return hi;
+    for (let k = 0; k < 18; k++) { const mid = (lo + hi) / 2; screenPos(mid) < mx ? lo = mid : hi = mid; }
+    return (lo + hi) / 2;
+  }
+
+  /* ---- layout (JS puro) e aplicação (só transform) ---- */
+  function layout() {
+    let total = -C.GAP;
+    entries.forEach(e => { e.w = e.baseW * e.s; total += e.w + C.GAP; });
+    let x = -total / 2;
+    entries.forEach(e => { e.x = x; x += e.w + C.GAP; });
+    halfW = (total + 2 * C.PAD) / 2;
+    panel.style.transform = `scaleX(${(2 * halfW / W0).toFixed(4)})`;
+  }
+  function apply() {
+    entries.forEach(e => {
+      const cx = (e.x + e.w / 2).toFixed(2);
+      e.el.style.transform = e.sep ? `translate3d(${cx}px,0,0)` : `translate3d(${e.x.toFixed(2)}px,0,0) scale(${e.s.toFixed(4)})`;
+      if (e.dot) e.dot.style.transform = `translate3d(${cx}px,0,0)`;
+    });
+  }
+  function updateTip(live) {
+    let best = null;
+    if (live) entries.forEach(e => { if (!e.sep && e.s > 1.2 && (!best || e.s > best.s)) best = e; });
+    if (best !== hot) { hot = best; if (best) tip.textContent = best.app.name; tip.style.opacity = best ? 1 : 0; }
+    if (hot) tip.style.transform = `translate3d(${(hot.x + hot.w / 2).toFixed(1)}px,${-(C.ITEM_BOTTOM + C.BASE * hot.s + 10).toFixed(1)}px,0) translateX(-50%)`;
+  }
+
+  /* ---- loop sob demanda ---- */
+  function wake() { if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); } }
+  function frame(now) {
+    raf = 0;
+    const k = 1 - Math.exp(-C.SMOOTH * Math.min(.05, (now - last) / 1000)); last = now;
+    const live = active && enabled;
+    const tw = live ? widthsFor(solve(mouseX)) : null;
+    let settled = true;
+    entries.forEach((e, i) => {
+      if (e.sep) return;
+      const t = tw ? tw[i] / e.baseW : 1, d = t - e.s;
+      if (Math.abs(d) > .002) { e.s += d * k; settled = false; } else e.s = t;
+    });
+    layout(); apply(); updateTip(live);
+    if (!settled) raf = requestAnimationFrame(frame);       // para sozinho ao estabilizar
+  }
+
+  /* ---- entrada ---- */
+  function onMove(e) {
+    if (!enabled) return;
+    const dx = e.clientX - innerWidth / 2;
+    const inY = e.clientY > innerHeight - (C.DOCK_BOTTOM + C.PANEL_H + 90);
+    const inside = inY && Math.abs(dx) < halfW + 30;
+    const was = active; active = inside; mouseX = dx;
+    if (inside || was) wake();                               // fora da Dock: custo zero
+  }
+  const leave = () => { if (active) { active = false; wake(); } };
+
+  function bounce(id) {
+    const e = entries.find(x => x.id === id); if (!e) return false;
+    const ic = e.el.querySelector('.icon');
+    ic.classList.remove('bounce'); void ic.offsetWidth; ic.classList.add('bounce');
+    return true;
+  }
+  function setEnabled(on) {
+    enabled = on;
+    if (!on) { active = false; entries.forEach(e => e.s = 1); layout(); apply(); updateTip(false); }
+  }
+
+  function init() {
+    root.addEventListener('click', e => { const it = e.target.closest('.item'); if (it) System.activate(it.dataset.id); });
+    root.addEventListener('contextmenu', e => { const it = e.target.closest('.item'); if (it) System.dockMenu(it.dataset.id, e); });
+    root.addEventListener('animationend', e => e.target.classList.remove('bounce'));
+    window.addEventListener('pointermove', onMove, { passive: true });
+    document.addEventListener('mouseleave', leave);
+    window.addEventListener('blur', leave);
+    Store.subscribe(() => {
+      const key = Store.dockIds().join('|');
+      if (key !== lastKey) { lastKey = key; render(); } else refreshRunning();
+    });
+    lastKey = Store.dockIds().join('|'); render();
+    setEnabled(Store.state.magnify && !Store.state.game);
+  }
+  return { init, bounce, setEnabled };
+})();
+
+/* ------------------------------------------------------------ 7. LAUNCHPAD */
+const Launchpad = (() => {
+  const el = $('#launchpad'), grid = $('#lp-grid'), search = $('#lp-search'), title = $('#lp-title');
+  let mode = 'launch', filter = 'all';
+
+  async function render() {
+    const q = search.value.trim().toLowerCase();
+    const apps = (await Backend.listApps()).filter(a => {
+      if (a.id === 'launchpad' || a.id === 'games') return false;
+      if (mode === 'pin' && (Store.SYSTEM.includes(a.id) || Store.state.pinned.includes(a.id))) return false;
+      if (filter === 'game' && a.kind !== 'game') return false;
+      return !q || a.name.toLowerCase().includes(q);
+    });
+    grid.innerHTML = apps.length
+      ? apps.map(a => `<button class="tile" data-id="${esc(a.id)}">${iconHTML(a)}<span>${esc(a.name)}</span></button>`).join('')
+      : '<p class="empty">Nada por aqui.</p>';
+  }
+  function open(m = 'launch', f = 'all') {
+    mode = m; filter = f; search.value = '';
+    title.textContent = m === 'pin' ? (f === 'game' ? 'Fixar jogo na barra' : 'Fixar na barra')
+                      : f === 'game' ? 'Pasta de Jogos' : 'Todos os Aplicativos';
+    render();
+    el.classList.add('open'); el.setAttribute('aria-hidden', 'false');
+    search.focus({ preventScroll: true });
+  }
+  function close() { el.classList.remove('open'); el.setAttribute('aria-hidden', 'true'); search.blur(); }
+
+  function init() {
+    search.addEventListener('input', render);
+    el.addEventListener('click', e => {
+      const t = e.target.closest('.tile');
+      if (!t) { if (e.target === el || e.target === grid) close(); return; }
+      const id = t.dataset.id; close();
+      if (mode === 'pin') { Store.pin(id); Dock.bounce(id); Toast.show(`${APPS_BY_ID[id].name} fixado na barra`); }
+      else System.activate(id);
+    });
+  }
+  return { init, open, close, get isOpen() { return el.classList.contains('open'); } };
+})();
+
+/* ------------------------------------------------------------- SETTINGS */
+const Settings = (() => {
+  const el = $('#settings');
+  const sGame = $('#s-game'), sMag = $('#s-magnify'), sFlat = $('#s-flat');
+  const sync = () => { sGame.checked = Store.state.game; sMag.checked = Store.state.magnify; sFlat.checked = Store.state.flat; };
+  function open() { sync(); el.classList.add('open'); el.setAttribute('aria-hidden', 'false'); }
+  function close() { el.classList.remove('open'); el.setAttribute('aria-hidden', 'true'); }
+  function init() {
+    sGame.addEventListener('change', () => GameMode.set(sGame.checked));
+    sMag.addEventListener('change', () => { Store.set('magnify', sMag.checked); Dock.setEnabled(sMag.checked && !Store.state.game); });
+    sFlat.addEventListener('change', () => { Store.set('flat', sFlat.checked); document.documentElement.classList.toggle('flat', sFlat.checked); });
+    $('#s-close').addEventListener('click', close);
+    el.addEventListener('click', e => { if (e.target === el) close(); });
+  }
+  return { init, open, close, sync, get isOpen() { return el.classList.contains('open'); } };
+})();
+
+/* ---------------------------------------------------------------- 8. SYSTEM */
+const System = {
+  async activate(id) {
+    Dock.bounce(id);
+    if (id === '__add')    return Launchpad.open('pin', 'all');
+    if (id === 'launchpad')return Launchpad.open('launch', 'all');
+    if (id === 'games')    return Launchpad.open('launch', 'game');
+    if (id === 'settings') return Settings.open();
+    return System.launch(id, true);
+  },
+  async launch(id, bounced = false) {
+    const app = APPS_BY_ID[id]; if (!app) return;
+    const existed = bounced || Dock.bounce(id);
+    if (Store.state.running.has(id)) { Backend.focus(app); return; }
+    try {
+      await Backend.launch(app);
+      Store.setRunning(id, true);                 // pode criar o ícone na Dock
+      if (!existed) Dock.bounce(id);
+      Toast.show(`${app.name} iniciado${Backend.isNative ? '' : ' (simulação)'}`);
+    } catch (err) { Toast.show(`Falha ao abrir ${app.name}`); console.error(err); }
+  },
+  async close(id) {
+    const app = APPS_BY_ID[id]; if (!app) return;
+    await Backend.close(app); Store.setRunning(id, false); Toast.show(`${app.name} encerrado`);
+  },
+  async closeAll() { for (const id of [...Store.state.running]) await System.close(id); },
+  async power(action) {
+    const label = { sleep: 'Suspender', restart: 'Reiniciar', shutdown: 'Desligar', lock: 'Bloquear tela', logout: 'Encerrar sessão' }[action];
+    await Backend.power(action);
+    Toast.show(Backend.isNative ? `${label}…` : `Simulação: "${label}" seria executado no Windows`);
+  },
+  dockMenu(id, e) {
+    e.preventDefault();
+    if (id === '__add') return;
+    const sys = Store.SYSTEM.includes(id), running = Store.state.running.has(id), pinned = Store.state.pinned.includes(id);
+    const items = [{ label: 'Abrir', action: () => System.activate(id) }];
+    if (running) items.push({ label: 'Encerrar', action: () => System.close(id) });
+    if (!sys) items.push({ sep: true }, pinned ? { label: 'Remover da barra', action: () => Store.unpin(id) } : { label: 'Manter na barra', action: () => Store.pin(id) });
+    Popup.open(items, { x: e.clientX, y: innerHeight - 112, above: true });
+  },
+};
+
+/* -------------------------------------------------------------- 9. GAMEMODE */
+const GameMode = {
+  set(on, { silent = false } = {}) {
+    Store.set('game', on);
+    document.documentElement.classList.toggle('game', on);
+    $('#btn-game').classList.toggle('on', on);
+    Popup.close();
+    Dock.setEnabled(!on && Store.state.magnify);
+    Backend.setGameMode(on);
+    Settings.sync();
+    if (!silent) Toast.show(on ? 'Modo Jogo ativado — animações e desfoque desligados' : 'Modo Jogo desativado');
+  },
+  toggle() { GameMode.set(!Store.state.game); },
+};
+
+/* --------------------------------------------------------------- MENUBAR */
+const MenuBar = (() => {
+  const MENUS = {
+    bw: () => [
+      { label: 'Sobre o BW', action: () => Toast.show('BW Shell · protótipo de interface') },
+      { sep: true },
+      { label: 'Configurações BW…', action: () => Settings.open() },
+      { label: Store.state.game ? 'Desativar Modo Jogo' : 'Ativar Modo Jogo', action: () => GameMode.toggle() },
+    ],
+    arquivo: () => [
+      { label: 'Nova Janela', kbd: 'Ctrl+N', action: () => System.launch('files') },
+      { label: 'Abrir Arquivo…', kbd: 'Ctrl+O', action: () => Toast.show('Seletor de arquivos: disponível com o backend Tauri') },
+      { sep: true },
+      { label: 'Encerrar todos os apps', disabled: !Store.state.running.size, action: () => System.closeAll() },
+    ],
+    apps: () => [
+      { label: 'Todos os Aplicativos', action: () => Launchpad.open('launch', 'all') },
+      { label: 'Fixar programa na barra…', action: () => Launchpad.open('pin', 'all') },
+      { sep: true },
+      ...APPS.filter(a => a.kind !== 'game' && !['launchpad', 'games', 'settings'].includes(a.id)).map(a => ({ label: a.name, action: () => System.launch(a.id) })),
+      { sep: true },
+      { label: 'Configurações BW', action: () => Settings.open() },
+    ],
+    jogos: () => [
+      { label: 'Pasta de Jogos…', action: () => Launchpad.open('launch', 'game') },
+      { label: 'Fixar jogo na barra…', action: () => Launchpad.open('pin', 'game') },
+      { sep: true },
+      ...APPS.filter(a => a.kind === 'game').map(a => ({ label: a.name, action: () => System.launch(a.id) })),
+      { sep: true },
+      { label: Store.state.game ? 'Desativar Modo Jogo' : 'Ativar Modo Jogo', action: () => GameMode.toggle() },
+    ],
+    energia: () => [
+      { label: 'Bloquear tela', action: () => System.power('lock') },
+      { label: 'Encerrar sessão…', action: () => System.power('logout') },
+      { sep: true },
+      { label: 'Suspender', action: () => System.power('sleep') },
+      { label: 'Reiniciar…', action: () => System.power('restart') },
+      { label: 'Desligar…', action: () => System.power('shutdown') },
+    ],
+  };
+  let current = null;
+
+  function open(btn) {
+    const r = btn.getBoundingClientRect();
+    btn.classList.add('active'); current = btn;
+    Popup.open(MENUS[btn.dataset.menu](), { x: r.left, y: r.bottom + 2, onClose: () => { btn.classList.remove('active'); if (current === btn) current = null; } });
+  }
+  function init() {
+    document.querySelectorAll('[data-menu]').forEach(btn => {
+      btn.addEventListener('click', () => { const same = current === btn; Popup.close(); if (!same) open(btn); });
+      btn.addEventListener('pointerenter', () => { if (current && current !== btn) { Popup.close(); open(btn); } });
+    });
+    $('#btn-game').addEventListener('click', () => GameMode.toggle());
+    $('#btn-wifi').addEventListener('click', () => Toast.show('Wi-Fi: conectado (simulação)'));
+    const snd = $('#btn-sound');
+    const paintSound = () => snd.classList.toggle('muted', Store.state.muted);
+    snd.addEventListener('click', () => { Store.set('muted', !Store.state.muted); paintSound(); Toast.show(Store.state.muted ? 'Som silenciado' : 'Som ativado'); });
+    paintSound();
+  }
+  return { init };
+})();
+
+/* ----------------------------------------------------------------- CLOCK
+   Atualiza uma vez por minuto, alinhado à virada do minuto (sem setInterval de 1s). */
+const Clock = (() => {
+  const el = $('#clock'); let t = 0;
+  const fmt = d => {
+    const dia = d.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' }).replace(/\./g, '');
+    return `${dia}  ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+  };
+  function tick() { el.textContent = fmt(new Date()); clearTimeout(t); t = setTimeout(tick, 60000 - (Date.now() % 60000) + 30); }
+  return { start() { tick(); document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); }); } };
+})();
+
+/* ------------------------------------------------------------------ 10. BOOT */
+(function boot() {
+  const r = document.documentElement.style, C = CONFIG;
+  r.setProperty('--base', C.BASE + 'px');
+  r.setProperty('--panel-h', C.PANEL_H + 'px');
+  r.setProperty('--item-bottom', C.ITEM_BOTTOM + 'px');
+  r.setProperty('--dock-bottom', C.DOCK_BOTTOM + 'px');
+  document.documentElement.classList.toggle('flat', Store.state.flat);
+
+  Launchpad.init(); Settings.init(); MenuBar.init(); Dock.init(); Clock.start();
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { Popup.close(); Launchpad.close(); Settings.close(); }
+  });
+})();
+</script>
+</body>
+</html>
