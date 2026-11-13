@@ -788,5 +788,29 @@ const Clock = (() => {
   });
 })();
 </script>
+<script>
+  const { exec } = require('child_process');
+
+  function abrirPrograma(comandoOuCaminho) {
+    exec(`start "" "${comandoOuCaminho}"`, (erro) => {
+      if (erro) {
+        console.error("Erro ao abrir:", erro);
+      }
+    });
+  }
+
+  function acaoEnergia(tipo) {
+    if (tipo === 'desligar') {
+      exec('shutdown /s /t 0');
+    } else if (tipo === 'reiniciar') {
+      exec('shutdown /r /t 0');
+    } else if (tipo === 'suspender') {
+      exec('rundll32.exe powrprof.dll,SetSuspendState 0,1,0');
+    } else if (tipo === 'logoff') {
+      exec('shutdown /l');
+    }
+  }
+</script>
 </body>
 </html>
+
