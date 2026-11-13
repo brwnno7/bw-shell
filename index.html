@@ -7,11 +7,8 @@
 <style>
 /* =====================================================================
    BW Shell · estilos
-   Regra de performance: tudo que anima usa apenas `transform` e `opacity`.
-   Hover/estados usam pseudo-elementos cuja opacidade é animada.
    ===================================================================== */
 :root {
-  /* definidos também via JS a partir de CONFIG (fonte única da verdade) */
   --base: 46px;
   --panel-h: 70px;
   --item-bottom: 12px;
@@ -35,7 +32,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   backdrop-filter: blur(24px) saturate(170%);
 }
 
-/* ---------- Papel de parede (estático) ---------- */
+/* ---------- Papel de parede ---------- */
 .wallpaper {
   position: fixed; inset: 0; z-index: 0;
   background:
@@ -113,16 +110,15 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   opacity: 0; transition: opacity .12s; pointer-events: none; will-change: transform, opacity;
 }
 
-/* ---------- Ícone (quadrado arredondado; símbolo ocupa 70%) ---------- */
+/* ---------- Ícone ---------- */
 .icon {
   width: 100%; height: 100%; border-radius: 22.5%; overflow: hidden;
   display: block; transform-origin: 50% 100%;
   box-shadow: 0 5px 12px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.45), inset 0 -2px 4px rgba(0,0,0,.15);
 }
-.icon svg { display: block; width: 100%; height: 100%; padding: 15%; } /* 100% - 2×15% = 70% */
+.icon svg { display: block; width: 100%; height: 100%; padding: 15%; }
 .icon.ghost { box-shadow: inset 0 0 0 1px rgba(255,255,255,.35), inset 0 1px 0 rgba(255,255,255,.4); }
 .icon.bounce { animation: bounce 1.1s 1; }
-/* Pulo estilo macOS: 4 saltos decrescentes (percentuais da altura do ícone) */
 @keyframes bounce {
   0%   { transform: translate3d(0,0,0); }
   10%  { transform: translate3d(0,-70%,0); animation-timing-function: cubic-bezier(.55,0,1,.45); }
@@ -135,7 +131,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   100% { transform: translate3d(0,0,0); }
 }
 
-/* ---------- Popup (menus e menu de contexto) ---------- */
+/* ---------- Popup ---------- */
 #popup {
   position: fixed; z-index: 60; min-width: 220px; padding: 5px; border-radius: 10px;
   background: rgba(34,36,50,.72); border: 1px solid rgba(255,255,255,.16);
@@ -149,7 +145,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .pi kbd { font: inherit; opacity: .55; }
 .psep { height: 1px; margin: 5px 6px; background: rgba(255,255,255,.15); }
 
-/* ---------- Overlays (Launchpad / Configurações) ---------- */
+/* ---------- Overlays ---------- */
 .overlay {
   position: fixed; inset: 0; z-index: 40; padding-top: var(--menubar-h);
   opacity: 0; transform: scale(1.03); transition: opacity .18s, transform .18s; pointer-events: none;
@@ -167,9 +163,10 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   width: min(860px, 92vw); display: grid; gap: 22px 12px; padding-bottom: 40px;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); overflow-y: auto; align-content: start;
 }
-.tile { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px 4px; transition: transform .15s; }
+.tile { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px 4px; transition: transform .15s; text-align: center; }
 .tile:hover { transform: scale(1.07); }
 .tile .icon { width: 72px; height: 72px; }
+.tile span { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .empty { grid-column: 1 / -1; text-align: center; opacity: .7; padding: 40px 0; }
 
 #settings { background: rgba(0,0,0,.35); display: grid; place-items: center; padding-top: 0; }
@@ -194,11 +191,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 }
 #toast.show { opacity: 1; transform: translate3d(-50%,0,0); }
 
-/* =====================================================================
-   MODO JOGO / TRANSPARÊNCIA REDUZIDA
-   .game  → sem desfoque, sem animações nem transições (libera a GPU)
-   .flat  → apenas sem desfoque
-   ===================================================================== */
+/* ---------- Modo Jogo / Transparência ---------- */
 .game *, .game *::before, .game *::after { animation: none !important; transition: none !important; }
 .game .glass, .flat .glass,
 .game #popup, .flat #popup, .game .dock-panel, .flat .dock-panel {
@@ -236,7 +229,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   </div>
 </header>
 
-<div class="hint"><b>BW</b>Passe o mouse sobre a Dock · clique com o botão direito nos ícones</div>
+<div class="hint"><b>BW</b>Coloque atalhos em C:\bw-shell\Jogos ou Apps · botão direito nos ícones</div>
 
 <section id="launchpad" class="overlay glass" aria-hidden="true">
   <div class="lp-head"><h2 id="lp-title">Todos os Aplicativos</h2><input id="lp-search" placeholder="Buscar…" autocomplete="off"></div>
@@ -263,36 +256,22 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 
 <script>
 'use strict';
-/* =====================================================================
-   BW Shell — arquitetura em módulos (todos neste arquivo por ora)
-
-   1. CONFIG    constantes de layout/física
-   2. CATALOG   apps e jogos conhecidos (ícones em SVG)
-   3. BACKEND   ÚNICA ponte com o sistema. Hoje: mock. Amanhã: Tauri (Rust)
-   4. STORE     estado + persistência (localStorage)
-   5. UI        Toast, Popup
-   6. DOCK      renderização + física de magnificação (rAF sob demanda)
-   7. LAUNCHPAD / SETTINGS
-   8. SYSTEM    orquestração (abrir app, fechar, energia, menus de contexto)
-   9. GAMEMODE, MENUBAR, CLOCK
-   10. BOOT
-   ===================================================================== */
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 
 /* ---------------------------------------------------------------- 1. CONFIG */
 const CONFIG = Object.freeze({
-  BASE: 46,            // tamanho base do ícone (px)
-  MAX_SCALE: 1.85,     // ampliação máxima (46 → ~85px)
-  GAP: 8,              // espaçamento entre ícones
-  PAD: 12,             // padding interno do painel de vidro
-  SEP_W: 9,            // largura do separador
-  RADIUS: 130,         // raio de influência da magnificação (px)
-  SMOOTH: 20,          // rigidez da suavização
-  DOCK_BOTTOM: 10,     // distância da Dock até a borda inferior
-  PANEL_H: 70,         // altura do painel (BASE + 2×PAD)
-  ITEM_BOTTOM: 12,     // distância dos ícones até a base do painel
+  BASE: 46,
+  MAX_SCALE: 1.85,
+  GAP: 8,
+  PAD: 12,
+  SEP_W: 9,
+  RADIUS: 130,
+  SMOOTH: 20,
+  DOCK_BOTTOM: 10,
+  PANEL_H: 70,
+  ITEM_BOTTOM: 12,
 });
 
 /* --------------------------------------------------------------- 2. CATALOG */
@@ -304,75 +283,126 @@ const gridDots = (() => {
   let t = ''; for (const y of [2, 24, 46]) for (const x of [2, 24, 46]) t += `<rect x="${x}" y="${y}" width="16" height="16" rx="5"/>`;
   return `<g fill="#fff">${t}</g>`;
 })();
+const gameGlyph = `<rect x="1" y="12" width="62" height="40" rx="20" fill="#fff"/><path d="M16 23v18M7 32h18" stroke="#6a3fe0" stroke-width="6" stroke-linecap="round"/><circle cx="44" cy="40" r="5" fill="#6a3fe0"/><circle cx="53" cy="29" r="5" fill="#ff5c8a"/>`;
+const appGlyph = `<rect x="8" y="8" width="48" height="48" rx="12" fill="#fff"/><path d="M22 32h20M32 22v20" stroke="#1f78f0" stroke-width="6" stroke-linecap="round"/>`;
 
-/* kind: 'system' | 'app' | 'game'.  `path` é o .exe real quando houver backend. */
 const A = (id, name, kind, bg, glyph, path = '') => ({ id, name, kind, bg, glyph, path });
-const APPS = [
+const BASE_APPS = [
   A('launchpad', 'Launchpad',         'system', 'linear-gradient(180deg,#8a97ff,#4a4fe0)', gridDots),
   A('files',     'Arquivos',          'system', 'linear-gradient(180deg,#5ec8ff,#1f78f0)',
-    `<path d="M2 16a7 7 0 0 1 7-7h14l7 8h25a7 7 0 0 1 7 7v28a7 7 0 0 1-7 7H9a7 7 0 0 1-7-7z" fill="#fff"/><path d="M2 27h60" stroke="#9fd2ff" stroke-width="3"/>`, 'C:\\Windows\\explorer.exe'),
+    `<path d="M2 16a7 7 0 0 1 7-7h14l7 8h25a7 7 0 0 1 7 7v28a7 7 0 0 1-7 7H9a7 7 0 0 1-7-7z" fill="#fff"/><path d="M2 27h60" stroke="#9fd2ff" stroke-width="3"/>`, 'explorer.exe'),
   A('browser',   'Navegador',         'system', 'linear-gradient(180deg,#58e8c8,#0f9d8a)',
-    `<circle cx="32" cy="32" r="29" fill="none" stroke="#fff" stroke-width="5"/><ellipse cx="32" cy="32" rx="12" ry="29" fill="none" stroke="#fff" stroke-width="4"/><path d="M4 32h56M9 18h46M9 46h46" stroke="#fff" stroke-width="4"/>`),
-  A('games',     'Pasta de Jogos',    'system', 'linear-gradient(180deg,#a97bff,#6a3fe0)',
-    `<rect x="1" y="12" width="62" height="40" rx="20" fill="#fff"/><path d="M16 23v18M7 32h18" stroke="#6a3fe0" stroke-width="6" stroke-linecap="round"/><circle cx="44" cy="40" r="5" fill="#6a3fe0"/><circle cx="53" cy="29" r="5" fill="#ff5c8a"/>`),
+    `<circle cx="32" cy="32" r="29" fill="none" stroke="#fff" stroke-width="5"/><ellipse cx="32" cy="32" rx="12" ry="29" fill="none" stroke="#fff" stroke-width="4"/><path d="M4 32h56M9 18h46M9 46h46" stroke="#fff" stroke-width="4"/>`, 'msedge'),
+  A('games',     'Pasta de Jogos',    'system', 'linear-gradient(180deg,#a97bff,#6a3fe0)', gameGlyph),
   A('settings',  'Configurações BW',  'system', 'linear-gradient(180deg,#c3c8d4,#7b818f)', gear),
 
   A('calc',  'Calculadora',   'app', 'linear-gradient(180deg,#ffb347,#ff7a00)',
-    `<rect x="4" y="2" width="56" height="18" rx="5" fill="#fff"/><g fill="#fff"><circle cx="13" cy="36" r="7"/><circle cx="32" cy="36" r="7"/><circle cx="51" cy="36" r="7"/><circle cx="13" cy="54" r="7"/><circle cx="32" cy="54" r="7"/><circle cx="51" cy="54" r="7"/></g>`, 'C:\\Windows\\System32\\calc.exe'),
+    `<rect x="4" y="2" width="56" height="18" rx="5" fill="#fff"/><g fill="#fff"><circle cx="13" cy="36" r="7"/><circle cx="32" cy="36" r="7"/><circle cx="51" cy="36" r="7"/><circle cx="13" cy="54" r="7"/><circle cx="32" cy="54" r="7"/><circle cx="51" cy="54" r="7"/></g>`, 'calc.exe'),
   A('notes', 'Bloco de Notas','app', 'linear-gradient(180deg,#ffe36a,#ffc400)',
-    `<rect x="6" y="2" width="52" height="60" rx="8" fill="#fffdf2"/><path d="M16 20h32M16 32h32M16 44h20" stroke="#d9c25a" stroke-width="5" stroke-linecap="round"/>`, 'C:\\Windows\\System32\\notepad.exe'),
+    `<rect x="6" y="2" width="52" height="60" rx="8" fill="#fffdf2"/><path d="M16 20h32M16 32h32M16 44h20" stroke="#d9c25a" stroke-width="5" stroke-linecap="round"/>`, 'notepad.exe'),
   A('term',  'Terminal',      'app', 'linear-gradient(180deg,#444857,#15161c)',
-    `<path d="M6 14l25 18-25 18" fill="none" stroke="#5cf28a" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M36 54h24" stroke="#5cf28a" stroke-width="7" stroke-linecap="round"/>`),
-  A('music', 'Música',        'app', 'linear-gradient(180deg,#ff6b81,#f0223f)',
-    `<path d="M22 4v40a11 11 0 1 0 6 10V19l28-7v26a11 11 0 1 0 6 10V0z" fill="#fff"/>`),
-
-  A('racer', 'Neon Racer',    'game', 'linear-gradient(180deg,#ff7a59,#d3265a)',
-    `<path d="M4 48a28 28 0 1 1 56 0" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round"/><path d="M32 48L46 22" stroke="#fff" stroke-width="7" stroke-linecap="round"/><circle cx="32" cy="48" r="7" fill="#fff"/>`),
-  A('space', 'Space Arena',   'game', 'linear-gradient(180deg,#3a3f94,#0f1236)',
-    `<circle cx="32" cy="32" r="18" fill="#ffd166"/><ellipse cx="32" cy="32" rx="30" ry="9" fill="none" stroke="#fff" stroke-width="5" transform="rotate(-22 32 32)"/>`),
-  A('quest', 'Pixel Quest',   'game', 'linear-gradient(180deg,#3ddc84,#0b8f4d)',
-    `<path d="M58 4h4v10L32 44l-12-12z" fill="#fff"/><path d="M12 28l24 24" stroke="#fff" stroke-width="6" stroke-linecap="round"/><path d="M14 50L5 59" stroke="#fff" stroke-width="8" stroke-linecap="round"/>`),
-  A('chess', 'Chess Pro',     'game', 'linear-gradient(180deg,#8b7bff,#35208f)',
-    `<circle cx="32" cy="14" r="11" fill="#fff"/><path d="M22 54l4-26h12l4 26z" fill="#fff"/><rect x="12" y="52" width="40" height="10" rx="5" fill="#fff"/>`),
+    `<path d="M6 14l25 18-25 18" fill="none" stroke="#5cf28a" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M36 54h24" stroke="#5cf28a" stroke-width="7" stroke-linecap="round"/>`, 'cmd.exe'),
+  A('steam', 'Steam',         'game', 'linear-gradient(180deg,#2a475e,#171a21)', gameGlyph, 'steam://open/main'),
 ];
+
 const ADD_APP = { id: '__add', name: 'Fixar programa ou jogo', kind: 'system', ghost: true, bg: 'rgba(255,255,255,.18)',
   glyph: `<path d="M32 4v56M4 32h56" stroke="#fff" stroke-width="7" stroke-linecap="round"/>` };
-const APPS_BY_ID = Object.fromEntries([...APPS, ADD_APP].map(a => [a.id, a]));
+
+let APPS = [...BASE_APPS];
+let APPS_BY_ID = Object.fromEntries([...APPS, ADD_APP].map(a => [a.id, a]));
 const iconHTML = a => `<div class="icon${a.ghost ? ' ghost' : ''}" style="background:${a.bg}"><svg viewBox="0 0 64 64" aria-hidden="true">${a.glyph}</svg></div>`;
 
-/* --------------------------------------------------------------- 3. BACKEND
-   Única superfície de contato com o sistema operacional.
-   Para a etapa Tauri, implemente em Rust os comandos abaixo (#[tauri::command]):
-
-     list_apps()                      -> Vec<AppInfo>   { id, name, kind, path, icon_url? }
-     launch_app({ id, path })         -> { ok, pid }    std::process::Command / ShellExecuteW
-     focus_app({ id })                -> { ok }         SetForegroundWindow
-     close_app({ id })                -> { ok }         encerrar processo / WM_CLOSE
-     power_action({ action })         -> { ok }         'sleep' | 'restart' | 'shutdown' | 'lock' | 'logout'
-     set_game_mode({ enabled })       -> { ok }         plano de energia, prioridade de processo, etc.
-
-   Nada fora deste módulo deve saber se o backend é mock ou nativo.
-   ===================================================================== */
+/* --------------------------------------------------------------- 3. BACKEND (ELECTRON / WINDOWS) */
 const Backend = (() => {
-  const invoke = window.__TAURI__?.core?.invoke ?? window.__TAURI__?.invoke ?? null;
-  const wait = ms => new Promise(r => setTimeout(r, ms));
-  const mock = {
-    async list_apps()   { return APPS; },
-    async launch_app()  { await wait(120); return { ok: true, pid: 1000 + Math.floor(Math.random() * 9e4) }; },
-    async focus_app()   { return { ok: true }; },
-    async close_app()   { await wait(60);  return { ok: true }; },
-    async power_action(){ return { ok: true }; },
-    async set_game_mode(){ return { ok: true }; },
-  };
-  const call = (cmd, args = {}) => invoke ? invoke(cmd, args) : mock[cmd](args);
+  let exec = null, fs = null, pathMod = null;
+  try {
+    exec = window.require('child_process').exec;
+    fs = window.require('fs');
+    pathMod = window.require('path');
+  } catch (e) {}
+
+  const GAMES_DIR = 'C:\bw-shell\Jogos';
+  const APPS_DIR = 'C:\bw-shell\Apps';
+
+  const GAME_COLORS = [
+    'linear-gradient(180deg,#ff7a59,#d3265a)',
+    'linear-gradient(180deg,#3a3f94,#0f1236)',
+    'linear-gradient(180deg,#3ddc84,#0b8f4d)',
+    'linear-gradient(180deg,#8b7bff,#35208f)',
+    'linear-gradient(180deg,#f7971e,#ffd200)',
+  ];
+
+  function scanCustomShortcuts() {
+    if (!fs || !pathMod) return [];
+    const found = [];
+    const folders = [
+      { dir: GAMES_DIR, kind: 'game', glyph: gameGlyph },
+      { dir: APPS_DIR,  kind: 'app',  glyph: appGlyph },
+    ];
+
+    folders.forEach(({ dir, kind, glyph }) => {
+      try {
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        const files = fs.readdirSync(dir);
+        files.forEach((file, idx) => {
+          const ext = pathMod.extname(file).toLowerCase();
+          if (!['.lnk', '.url', '.exe', '.bat'].includes(ext)) return;
+          const cleanName = pathMod.basename(file, ext);
+          const id = `${kind}_${cleanName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}`;
+          const fullPath = pathMod.join(dir, file);
+          const bg = GAME_COLORS[idx % GAME_COLORS.length];
+          found.push(A(id, cleanName, kind, bg, glyph, fullPath));
+        });
+      } catch (e) { console.error(e); }
+    });
+    return found;
+  }
+
+  function refreshCatalog() {
+    const custom = scanCustomShortcuts();
+    APPS = [...BASE_APPS, ...custom];
+    APPS_BY_ID = Object.fromEntries([...APPS, ADD_APP].map(a => [a.id, a]));
+    return APPS;
+  }
+
+  const run = cmd => new Promise((resolve, reject) => {
+    if (!exec) return resolve({ ok: true });
+    exec(cmd, (err) => err ? reject(err) : resolve({ ok: true }));
+  });
+
   return {
-    isNative: !!invoke,
-    listApps:    ()         => call('list_apps'),
-    launch:      app        => call('launch_app', { id: app.id, path: app.path }),
-    focus:       app        => call('focus_app',  { id: app.id }),
-    close:       app        => call('close_app',  { id: app.id }),
-    power:       action     => call('power_action', { action }),
-    setGameMode: enabled    => call('set_game_mode', { enabled }),
+    isNative: !!exec,
+    GAMES_DIR,
+    APPS_DIR,
+    refreshCatalog,
+    async listApps() { return refreshCatalog(); },
+    async launch(app) {
+      if (!app.path) return { ok: true };
+      return run(`start "" "${app.path}"`);
+    },
+    async focus(app) {
+      if (!app.path) return { ok: true };
+      return run(`start "" "${app.path}"`);
+    },
+    async close(app) {
+      if (!app.path || !app.path.toLowerCase().endsWith('.exe')) return { ok: true };
+      const exeName = app.path.split('\').pop().split('/').pop();
+      return run(`taskkill /IM "${exeName}" /F`).catch(() => ({ ok: true }));
+    },
+    async power(action) {
+      const cmds = {
+        lock:     'rundll32.exe user32.dll,LockWorkStation',
+        logout:   'shutdown /l',
+        sleep:    'rundll32.exe powrprof.dll,SetSuspendState 0,1,0',
+        restart:  'shutdown /r /t 0',
+        shutdown: 'shutdown /s /t 0',
+      };
+      return cmds[action] ? run(cmds[action]) : { ok: true };
+    },
+    async setGameMode(enabled) {
+      const guid = enabled ? '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c' : '381b4222-f694-41f0-9685-ff5bb260df2e';
+      return run(`powercfg /setactive ${guid}`).catch(() => ({ ok: true }));
+    },
   };
 })();
 
@@ -383,6 +413,8 @@ const Store = (() => {
   const PERSIST = ['pinned', 'magnify', 'flat', 'muted'];
   const state = { pinned: [], running: new Set(), game: false, magnify: true, flat: false, muted: false };
   const subs = new Set();
+
+  Backend.refreshCatalog();
 
   try { Object.assign(state, JSON.parse(localStorage.getItem(KEY) || '{}'), { game: false }); } catch {}
   state.running = new Set();
@@ -398,7 +430,6 @@ const Store = (() => {
     pin(id)   { if (!state.pinned.includes(id)) { state.pinned.push(id); save(); emit(); } },
     unpin(id) { state.pinned = state.pinned.filter(x => x !== id); save(); emit(); },
     setRunning(id, on) { on ? state.running.add(id) : state.running.delete(id); emit(); },
-    /* ordem da Dock: sistema | separador | fixados | em execução (não fixados) | + */
     dockIds() {
       const extra = [...state.running].filter(id => !SYSTEM.includes(id) && !state.pinned.includes(id));
       return [...SYSTEM, 'sep', ...state.pinned, ...extra, '__add'];
@@ -437,14 +468,7 @@ const Popup = (() => {
   return { open, close, get isOpen() { return el.classList.contains('open'); } };
 })();
 
-/* ------------------------------------------------------------------ 6. DOCK
-   Física: o "ponto de foco" no espaço-base é obtido invertendo o layout
-   magnificado (busca binária) a partir da posição do mouse → sem realimentação,
-   logo sem tremor, e o ícone sob o cursor permanece sob o cursor.
-   Render: cada ícone é `translate3d + scale` (só compositor). O painel de vidro
-   cresce com `scaleX`. Nenhuma propriedade de layout é alterada por frame.
-   Loop: requestAnimationFrame SOB DEMANDA — roda só enquanto algo se move.
-   ===================================================================== */
+/* ------------------------------------------------------------------ 6. DOCK */
 const Dock = (() => {
   const C = CONFIG;
   const root = $('#dock'), panel = $('.dock-panel'), tip = $('.tip');
@@ -453,13 +477,13 @@ const Dock = (() => {
 
   const falloff = d => d >= C.RADIUS ? 0 : (1 + Math.cos(Math.PI * d / C.RADIUS)) / 2;
 
-  /* ---- montagem ---- */
   function render() {
     const prev = new Map(entries.map(e => [e.id, e.s]));
     root.querySelectorAll('.item, .sep, .dot').forEach(n => n.remove());
     hot = null; tip.style.opacity = 0;
     entries = Store.dockIds().map(id => {
       const sep = id === 'sep', app = sep ? null : APPS_BY_ID[id];
+      if (!sep && !app) return null;
       const el = document.createElement('div');
       el.className = sep ? 'sep' : 'item';
       let dot = null;
@@ -469,11 +493,11 @@ const Dock = (() => {
       }
       root.appendChild(el); dot && root.appendChild(dot);
       return { id, sep, app, el, dot, baseW: sep ? C.SEP_W : C.BASE, s: prev.get(id) ?? 1, x: 0, w: 0, bl: 0, bc: 0 };
-    });
+    }).filter(Boolean);
     let acc = 0;
     entries.forEach((e, i) => { e.bl = acc; e.bc = acc + e.baseW / 2; acc += e.baseW + (i < entries.length - 1 ? C.GAP : 0); });
     baseTotal = acc;
-    entries.forEach(e => { e.bl -= baseTotal / 2; e.bc -= baseTotal / 2; });   // origem no centro da Dock
+    entries.forEach(e => { e.bl -= baseTotal / 2; e.bc -= baseTotal / 2; });
     W0 = baseTotal + 2 * C.PAD;
     panel.style.width = W0 + 'px'; panel.style.left = (-W0 / 2) + 'px';
     refreshRunning(); layout(); apply();
@@ -481,7 +505,6 @@ const Dock = (() => {
   }
   const refreshRunning = () => entries.forEach(e => e.dot && e.dot.classList.toggle('on', Store.state.running.has(e.id)));
 
-  /* ---- física ---- */
   const widthsFor = u => entries.map(e => e.sep ? e.baseW : e.baseW * (1 + (C.MAX_SCALE - 1) * falloff(Math.abs(e.bc - u))));
   function screenPos(u) {
     const w = widthsFor(u), n = entries.length;
@@ -505,7 +528,6 @@ const Dock = (() => {
     return (lo + hi) / 2;
   }
 
-  /* ---- layout (JS puro) e aplicação (só transform) ---- */
   function layout() {
     let total = -C.GAP;
     entries.forEach(e => { e.w = e.baseW * e.s; total += e.w + C.GAP; });
@@ -528,7 +550,6 @@ const Dock = (() => {
     if (hot) tip.style.transform = `translate3d(${(hot.x + hot.w / 2).toFixed(1)}px,${-(C.ITEM_BOTTOM + C.BASE * hot.s + 10).toFixed(1)}px,0) translateX(-50%)`;
   }
 
-  /* ---- loop sob demanda ---- */
   function wake() { if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); } }
   function frame(now) {
     raf = 0;
@@ -542,17 +563,16 @@ const Dock = (() => {
       if (Math.abs(d) > .002) { e.s += d * k; settled = false; } else e.s = t;
     });
     layout(); apply(); updateTip(live);
-    if (!settled) raf = requestAnimationFrame(frame);       // para sozinho ao estabilizar
+    if (!settled) raf = requestAnimationFrame(frame);
   }
 
-  /* ---- entrada ---- */
   function onMove(e) {
     if (!enabled) return;
     const dx = e.clientX - innerWidth / 2;
     const inY = e.clientY > innerHeight - (C.DOCK_BOTTOM + C.PANEL_H + 90);
     const inside = inY && Math.abs(dx) < halfW + 30;
     const was = active; active = inside; mouseX = dx;
-    if (inside || was) wake();                               // fora da Dock: custo zero
+    if (inside || was) wake();
   }
   const leave = () => { if (active) { active = false; wake(); } };
 
@@ -599,7 +619,7 @@ const Launchpad = (() => {
     });
     grid.innerHTML = apps.length
       ? apps.map(a => `<button class="tile" data-id="${esc(a.id)}">${iconHTML(a)}<span>${esc(a.name)}</span></button>`).join('')
-      : '<p class="empty">Nada por aqui.</p>';
+      : `<p class="empty">Nenhum item encontrado. Cole atalhos (.lnk) em <b>${filter === 'game' ? Backend.GAMES_DIR : Backend.APPS_DIR}</b>.</p>`;
   }
   function open(m = 'launch', f = 'all') {
     mode = m; filter = f; search.value = '';
@@ -645,10 +665,10 @@ const Settings = (() => {
 const System = {
   async activate(id) {
     Dock.bounce(id);
-    if (id === '__add')    return Launchpad.open('pin', 'all');
-    if (id === 'launchpad')return Launchpad.open('launch', 'all');
-    if (id === 'games')    return Launchpad.open('launch', 'game');
-    if (id === 'settings') return Settings.open();
+    if (id === '__add')     return Launchpad.open('pin', 'all');
+    if (id === 'launchpad') return Launchpad.open('launch', 'all');
+    if (id === 'games')     return Launchpad.open('launch', 'game');
+    if (id === 'settings')  return Settings.open();
     return System.launch(id, true);
   },
   async launch(id, bounced = false) {
@@ -657,9 +677,9 @@ const System = {
     if (Store.state.running.has(id)) { Backend.focus(app); return; }
     try {
       await Backend.launch(app);
-      Store.setRunning(id, true);                 // pode criar o ícone na Dock
+      Store.setRunning(id, true);
       if (!existed) Dock.bounce(id);
-      Toast.show(`${app.name} iniciado${Backend.isNative ? '' : ' (simulação)'}`);
+      Toast.show(`${app.name} iniciado`);
     } catch (err) { Toast.show(`Falha ao abrir ${app.name}`); console.error(err); }
   },
   async close(id) {
@@ -669,8 +689,8 @@ const System = {
   async closeAll() { for (const id of [...Store.state.running]) await System.close(id); },
   async power(action) {
     const label = { sleep: 'Suspender', restart: 'Reiniciar', shutdown: 'Desligar', lock: 'Bloquear tela', logout: 'Encerrar sessão' }[action];
+    Toast.show(`${label}…`);
     await Backend.power(action);
-    Toast.show(Backend.isNative ? `${label}…` : `Simulação: "${label}" seria executado no Windows`);
   },
   dockMenu(id, e) {
     e.preventDefault();
@@ -700,35 +720,45 @@ const GameMode = {
 
 /* --------------------------------------------------------------- MENUBAR */
 const MenuBar = (() => {
+  const openDir = dir => { try { window.require('child_process').exec(`explorer.exe "${dir}"`); } catch {} };
   const MENUS = {
     bw: () => [
-      { label: 'Sobre o BW', action: () => Toast.show('BW Shell · protótipo de interface') },
+      { label: 'Sobre o BW', action: () => Toast.show('BW Shell · Windows Edition') },
       { sep: true },
       { label: 'Configurações BW…', action: () => Settings.open() },
       { label: Store.state.game ? 'Desativar Modo Jogo' : 'Ativar Modo Jogo', action: () => GameMode.toggle() },
     ],
     arquivo: () => [
-      { label: 'Nova Janela', kbd: 'Ctrl+N', action: () => System.launch('files') },
-      { label: 'Abrir Arquivo…', kbd: 'Ctrl+O', action: () => Toast.show('Seletor de arquivos: disponível com o backend Tauri') },
+      { label: 'Nova Janela (Arquivos)', kbd: 'Ctrl+N', action: () => System.launch('files') },
+      { label: 'Abrir Pasta de Jogos', action: () => openDir(Backend.GAMES_DIR) },
+      { label: 'Abrir Pasta de Apps', action: () => openDir(Backend.APPS_DIR) },
+      { label: 'Gerenciador de Tarefas', kbd: 'Ctrl+Shift+Esc', action: () => { try { window.require('child_process').exec('taskmgr'); } catch {} } },
       { sep: true },
       { label: 'Encerrar todos os apps', disabled: !Store.state.running.size, action: () => System.closeAll() },
     ],
-    apps: () => [
-      { label: 'Todos os Aplicativos', action: () => Launchpad.open('launch', 'all') },
-      { label: 'Fixar programa na barra…', action: () => Launchpad.open('pin', 'all') },
-      { sep: true },
-      ...APPS.filter(a => a.kind !== 'game' && !['launchpad', 'games', 'settings'].includes(a.id)).map(a => ({ label: a.name, action: () => System.launch(a.id) })),
-      { sep: true },
-      { label: 'Configurações BW', action: () => Settings.open() },
-    ],
-    jogos: () => [
-      { label: 'Pasta de Jogos…', action: () => Launchpad.open('launch', 'game') },
-      { label: 'Fixar jogo na barra…', action: () => Launchpad.open('pin', 'game') },
-      { sep: true },
-      ...APPS.filter(a => a.kind === 'game').map(a => ({ label: a.name, action: () => System.launch(a.id) })),
-      { sep: true },
-      { label: Store.state.game ? 'Desativar Modo Jogo' : 'Ativar Modo Jogo', action: () => GameMode.toggle() },
-    ],
+    apps: () => {
+      Backend.refreshCatalog();
+      return [
+        { label: 'Todos os Aplicativos', action: () => Launchpad.open('launch', 'all') },
+        { label: 'Fixar programa na barra…', action: () => Launchpad.open('pin', 'all') },
+        { sep: true },
+        ...APPS.filter(a => a.kind !== 'game' && !['launchpad', 'games', 'settings'].includes(a.id)).map(a => ({ label: a.name, action: () => System.launch(a.id) })),
+        { sep: true },
+        { label: 'Adicionar atalhos de Apps…', action: () => openDir(Backend.APPS_DIR) },
+      ];
+    },
+    jogos: () => {
+      Backend.refreshCatalog();
+      return [
+        { label: 'Pasta de Jogos…', action: () => Launchpad.open('launch', 'game') },
+        { label: 'Fixar jogo na barra…', action: () => Launchpad.open('pin', 'game') },
+        { label: 'Adicionar atalhos de Jogos…', action: () => openDir(Backend.GAMES_DIR) },
+        { sep: true },
+        ...APPS.filter(a => a.kind === 'game').map(a => ({ label: a.name, action: () => System.launch(a.id) })),
+        { sep: true },
+        { label: Store.state.game ? 'Desativar Modo Jogo' : 'Ativar Modo Jogo', action: () => GameMode.toggle() },
+      ];
+    },
     energia: () => [
       { label: 'Bloquear tela', action: () => System.power('lock') },
       { label: 'Encerrar sessão…', action: () => System.power('logout') },
@@ -751,7 +781,7 @@ const MenuBar = (() => {
       btn.addEventListener('pointerenter', () => { if (current && current !== btn) { Popup.close(); open(btn); } });
     });
     $('#btn-game').addEventListener('click', () => GameMode.toggle());
-    $('#btn-wifi').addEventListener('click', () => Toast.show('Wi-Fi: conectado (simulação)'));
+    $('#btn-wifi').addEventListener('click', () => { try { window.require('child_process').exec('start ms-settings:network-wifi'); } catch {} });
     const snd = $('#btn-sound');
     const paintSound = () => snd.classList.toggle('muted', Store.state.muted);
     snd.addEventListener('click', () => { Store.set('muted', !Store.state.muted); paintSound(); Toast.show(Store.state.muted ? 'Som silenciado' : 'Som ativado'); });
@@ -760,8 +790,7 @@ const MenuBar = (() => {
   return { init };
 })();
 
-/* ----------------------------------------------------------------- CLOCK
-   Atualiza uma vez por minuto, alinhado à virada do minuto (sem setInterval de 1s). */
+/* ----------------------------------------------------------------- CLOCK */
 const Clock = (() => {
   const el = $('#clock'); let t = 0;
   const fmt = d => {
@@ -788,29 +817,5 @@ const Clock = (() => {
   });
 })();
 </script>
-<script>
-  const { exec } = require('child_process');
-
-  function abrirPrograma(comandoOuCaminho) {
-    exec(`start "" "${comandoOuCaminho}"`, (erro) => {
-      if (erro) {
-        console.error("Erro ao abrir:", erro);
-      }
-    });
-  }
-
-  function acaoEnergia(tipo) {
-    if (tipo === 'desligar') {
-      exec('shutdown /s /t 0');
-    } else if (tipo === 'reiniciar') {
-      exec('shutdown /r /t 0');
-    } else if (tipo === 'suspender') {
-      exec('rundll32.exe powrprof.dll,SetSuspendState 0,1,0');
-    } else if (tipo === 'logoff') {
-      exec('shutdown /l');
-    }
-  }
-</script>
 </body>
 </html>
-
